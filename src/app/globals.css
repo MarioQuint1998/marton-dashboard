@@ -1,0 +1,193 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Space+Grotesk:wght@300..700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #006368;
+  --primary-dark: #004d51;
+  --primary-light: #008a91;
+  --secondary: #a5f7c0;
+  --accent: #008a91;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  min-height: 100vh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #006368;
+  border-radius: 4px;
+  opacity: 0.5;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #004d51;
+}
+
+/* Animations */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.loading-shimmer {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Card hover effects */
+.card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 40px -12px rgba(0, 99, 104, 0.15);
+}
+
+/* Metric cards */
+.metric-card {
+  @apply bg-white rounded-2xl p-6 shadow-card card-hover;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.metric-card:hover::before {
+  opacity: 1;
+}
+
+/* Number formatting */
+.metric-value {
+  @apply font-display font-bold text-3xl text-gray-900;
+  letter-spacing: -0.02em;
+}
+
+.metric-label {
+  @apply text-sm text-gray-500 font-medium uppercase tracking-wider;
+}
+
+/* Chart container */
+.chart-container {
+  @apply bg-white rounded-2xl p-6 shadow-card;
+}
+
+/* Tab navigation */
+.nav-tab {
+  @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
+}
+
+.nav-tab.active {
+  @apply bg-primary text-white shadow-lg;
+}
+
+.nav-tab:not(.active) {
+  @apply text-gray-600 hover:bg-gray-100;
+}
+
+/* Date picker styling */
+input[type="date"] {
+  @apply px-4 py-2 rounded-lg border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all;
+}
+
+/* Button styles */
+.btn-primary {
+  @apply bg-primary text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:bg-primary-dark transition-all duration-200 hover:shadow-elevated active:scale-[0.98];
+}
+
+.btn-secondary {
+  @apply bg-white text-primary border-2 border-primary px-6 py-3 rounded-xl font-semibold hover:bg-primary hover:text-white transition-all duration-200;
+}
+
+/* Tooltip */
+.tooltip {
+  @apply absolute z-50 px-3 py-2 text-sm text-white bg-gray-900 rounded-lg shadow-lg;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.tooltip.visible {
+  opacity: 1;
+}
+
+/* Responsive grid */
+.metrics-grid {
+  @apply grid gap-6;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+/* Status badges */
+.badge {
+  @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold;
+}
+
+.badge-success {
+  @apply bg-green-100 text-green-800;
+}
+
+.badge-warning {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.badge-danger {
+  @apply bg-red-100 text-red-800;
+}
+
+/* Loading states */
+.skeleton {
+  @apply bg-gray-200 rounded animate-pulse;
+}
+
+/* Comparison indicators */
+.trend-up {
+  @apply text-green-600;
+}
+
+.trend-down {
+  @apply text-red-600;
+}
+
+/* Focus states */
+*:focus-visible {
+  @apply outline-none ring-2 ring-primary/50 ring-offset-2;
+}
