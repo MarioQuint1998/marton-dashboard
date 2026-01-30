@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Download, TrendingUp, Users, CreditCard, Target, Percent, Clock, ShoppingCart, UserCheck, Activity } from 'lucide-react';
+import { RefreshCw, Download, TrendingUp, Users, CreditCard, Target, Percent, Clock, ShoppingCart, UserCheck, Activity, Search } from 'lucide-react';
 import LoginScreen from '@/components/LoginScreen';
 import Navigation from '@/components/Navigation';
 import DatePicker from '@/components/DatePicker';
@@ -27,6 +27,12 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
 
+  // New states for customers and churned
+  const [customers, setCustomers] = useState(null);
+  const [churned, setChurned] = useState(null);
+  const [customersLoading, setCustomersLoading] = useState(false);
+  const [churnedLoading, setChurnedLoading] = useState(false);
+
   // Date range
   const presets = getDatePresets();
   const [startDate, setStartDate] = useState(presets.thisMonth.start);
@@ -41,7 +47,7 @@ export default function Dashboard() {
     setCheckingAuth(false);
   }, []);
 
-  // Fetch data function
+  // Fetch main data function
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -72,12 +78,46 @@ export default function Dashboard() {
     }
   }, [startDate, endDate]);
 
+  // Fetch customers data
+  const fetchCustomers = useCallback(async () => {
+    setCustomersLoading(true);
+    try {
+      const response = await fetch(`/api/customers?startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`);
+      const result = await response.json();
+      if (!result.error) {
+        setCustomers(result);
+      }
+    } catch (err) {
+      console.error('Error fetching customers:', err);
+    } finally {
+      setCustomersLoading(false);
+    }
+  }, [startDate, endDate]);
+
+  // Fetch churned data
+  const fetchChurned = useCallback(async () => {
+    setChurnedLoading(true);
+    try {
+      const response = await fetch(`/api/churned?startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`);
+      const result = await response.json();
+      if (!result.error) {
+        setChurned(result);
+      }
+    } catch (err) {
+      console.error('Error fetching churned:', err);
+    } finally {
+      setChurnedLoading(false);
+    }
+  }, [startDate, endDate]);
+
   // Fetch data on mount and when date range changes
   useEffect(() => {
     if (isAuthenticated) {
       fetchData();
+      fetchCustomers();
+      fetchChurned();
     }
-  }, [isAuthenticated, fetchData]);
+  }, [isAuthenticated, fetchData, fetchCustomers, fetchChurned]);
 
   // Handle date change
   const handleDateChange = (start, end) => {
@@ -85,11 +125,18 @@ export default function Dashboard() {
     setEndDate(end);
   };
 
+  // Handle refresh
+  const handleRefresh = () => {
+    fetchData();
+    fetchCustomers();
+    fetchChurned();
+  };
+
   // Export to CSV
   const handleExport = () => {
     if (!data) return;
 
-    const csvContent = generateCSV(data, activeTab);
+    const csvContent = generateCSV(data, activeTab, customers, churned);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -140,7 +187,7 @@ export default function Dashboard() {
               />
               
               <button
-                onClick={fetchData}
+                onClick={handleRefresh}
                 disabled={loading}
                 className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl font-medium hover:bg-primary-dark transition-all shadow-sm hover:shadow-md disabled:opacity-50"
               >
@@ -184,6 +231,8 @@ export default function Dashboard() {
         {activeTab === 'overview' && <OverviewTab data={data} loading={loading} />}
         {activeTab === 'saas' && <SaaSTab data={data} loading={loading} />}
         {activeTab === 'agency' && <AgencyTab data={data} loading={loading} />}
+        {activeTab === 'customers' && <CustomersTab customers={customers} loading={customersLoading} />}
+        {activeTab === 'churned' && <ChurnedTab churned={churned} loading={churnedLoading} />}
         {activeTab === 'insights' && <InsightsTab data={data} loading={loading} />}
       </main>
     </div>
@@ -404,6 +453,349 @@ function AgencyTab({ data, loading }) {
   );
 }
 
+// NEW: Customers Tab
+function CustomersTab({ customers, loading }) {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  const { subscribers = [], oneTimeBuyers = [], summary = {} } = customers || {};
+
+  // Filter by search term
+  const filteredSubscribers = subscribers.filter(s =>
+    s.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.customerEmail?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredOneTime = oneTimeBuyers.filter(b =>
+    b.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    b.customerEmail?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-8 animate-fade-in">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <MetricCard
+          label="Aktive Abonnenten"
+          value={summary.totalSubscribers || 0}
+          format="number"
+          icon={Users}
+          loading={loading}
+        />
+        <MetricCard
+          label="Einzelkäufer"
+          value={summary.totalOneTime || 0}
+          format="number"
+          icon={ShoppingCart}
+          loading={loading}
+        />
+        <MetricCard
+          label="Gesamt Kunden"
+          value={summary.totalCustomers || 0}
+          format="number"
+          icon={UserCheck}
+          loading={loading}
+        />
+      </div>
+
+      {/* Search */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Kunden suchen..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent"
+        />
+      </div>
+
+      {/* Active Subscribers Table */}
+      <div className="bg-white rounded-2xl p-6 shadow-card">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+          Aktive Abonnenten ({filteredSubscribers.length})
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-sm text-gray-500 border-b">
+                <th className="pb-3 pr-4 font-medium">Kunde</th>
+                <th className="pb-3 pr-4 font-medium">E-Mail</th>
+                <th className="pb-3 pr-4 font-medium">Produkt</th>
+                <th className="pb-3 pr-4 font-medium">Plan</th>
+                <th className="pb-3 pr-4 font-medium">Betrag</th>
+                <th className="pb-3 pr-4 font-medium">Seit</th>
+                <th className="pb-3 font-medium">Nächste Zahlung</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredSubscribers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-gray-500">
+                    Keine Abonnenten gefunden
+                  </td>
+                </tr>
+              ) : (
+                filteredSubscribers.map((sub, i) => (
+                  <tr key={sub.id || i} className="border-b last:border-0 hover:bg-gray-50">
+                    <td className="py-4 pr-4 font-medium text-gray-900">{sub.customerName}</td>
+                    <td className="py-4 pr-4 text-gray-500 text-sm">{sub.customerEmail}</td>
+                    <td className="py-4 pr-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        sub.source === 'marton.ai'
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {sub.source}
+                      </span>
+                    </td>
+                    <td className="py-4 pr-4 text-gray-700">{sub.plan}</td>
+                    <td className="py-4 pr-4 font-medium text-gray-900">
+                      {formatCurrency(sub.amount)}/{sub.interval === 'month' ? 'Monat' : 'Jahr'}
+                    </td>
+                    <td className="py-4 pr-4 text-gray-500">{formatDate(sub.startDate)}</td>
+                    <td className="py-4 text-gray-500">{formatDate(sub.currentPeriodEnd)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* One-time Buyers Table */}
+      <div className="bg-white rounded-2xl p-6 shadow-card">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
+          Einzelkäufer ({filteredOneTime.length})
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-sm text-gray-500 border-b">
+                <th className="pb-3 pr-4 font-medium">Kunde</th>
+                <th className="pb-3 pr-4 font-medium">E-Mail</th>
+                <th className="pb-3 pr-4 font-medium">Produkt</th>
+                <th className="pb-3 pr-4 font-medium">Beschreibung</th>
+                <th className="pb-3 pr-4 font-medium">Betrag</th>
+                <th className="pb-3 font-medium">Datum</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredOneTime.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-gray-500">
+                    Keine Einzelkäufer gefunden
+                  </td>
+                </tr>
+              ) : (
+                filteredOneTime.map((buyer, i) => (
+                  <tr key={buyer.id || i} className="border-b last:border-0 hover:bg-gray-50">
+                    <td className="py-4 pr-4 font-medium text-gray-900">{buyer.customerName}</td>
+                    <td className="py-4 pr-4 text-gray-500 text-sm">{buyer.customerEmail}</td>
+                    <td className="py-4 pr-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        buyer.source === 'marton.ai'
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {buyer.source}
+                      </span>
+                    </td>
+                    <td className="py-4 pr-4 text-gray-700">{buyer.description}</td>
+                    <td className="py-4 pr-4 font-medium text-gray-900">{formatCurrency(buyer.amount)}</td>
+                    <td className="py-4 text-gray-500">{formatDate(buyer.date)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// NEW: Churned Customers Tab
+function ChurnedTab({ churned, loading }) {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const reasonTranslations = {
+    'cancellation_requested': 'Auf Kundenwunsch',
+    'payment_failed': 'Zahlungsfehler',
+    'payment_disputed': 'Zahlung angefochten',
+    'too_expensive': 'Zu teuer',
+    'missing_features': 'Fehlende Features',
+    'switched_service': 'Zu anderem Anbieter gewechselt',
+    'unused': 'Nicht genutzt',
+    'customer_service': 'Kundenservice',
+    'too_complex': 'Zu kompliziert',
+    'low_quality': 'Qualität nicht ausreichend',
+    'other': 'Sonstiges',
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  const { churnedCustomers = [], summary = {} } = churned || {};
+
+  // Filter by search term
+  const filteredChurned = churnedCustomers.filter(c =>
+    c.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.customerEmail?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-8 animate-fade-in">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <MetricCard
+          label="Gekündigte Abos"
+          value={summary.totalChurned || 0}
+          format="number"
+          icon={Users}
+          loading={loading}
+        />
+        <MetricCard
+          label="Verlorener MRR"
+          value={summary.totalMrrLost || 0}
+          format="currency"
+          icon={TrendingUp}
+          loading={loading}
+        />
+        <MetricCard
+          label="Ø Abo-Dauer"
+          value={summary.avgSubscriptionDays || 0}
+          format="days"
+          icon={Clock}
+          loading={loading}
+        />
+        <MetricCard
+          label="Churn Rate"
+          value={0}
+          format="percent"
+          subtitle="Wird berechnet..."
+          icon={Percent}
+          loading={loading}
+        />
+      </div>
+
+      {/* Reason Breakdown */}
+      {summary.reasonBreakdown && Object.keys(summary.reasonBreakdown).length > 0 && (
+        <div className="bg-white rounded-2xl p-6 shadow-card">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Kündigungsgründe</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Object.entries(summary.reasonBreakdown).map(([reason, count]) => (
+              <div key={reason} className="bg-gray-50 rounded-xl p-4">
+                <p className="text-2xl font-bold text-gray-900">{count}</p>
+                <p className="text-sm text-gray-500">{reasonTranslations[reason] || reason}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Search */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Gekündigte Kunden suchen..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent"
+        />
+      </div>
+
+      {/* Churned Customers Table */}
+      <div className="bg-white rounded-2xl p-6 shadow-card">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <span className="w-3 h-3 bg-red-500 rounded-full"></span>
+          Gekündigte Kunden ({filteredChurned.length})
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-sm text-gray-500 border-b">
+                <th className="pb-3 pr-4 font-medium">Kunde</th>
+                <th className="pb-3 pr-4 font-medium">E-Mail</th>
+                <th className="pb-3 pr-4 font-medium">Produkt</th>
+                <th className="pb-3 pr-4 font-medium">Plan</th>
+                <th className="pb-3 pr-4 font-medium">MRR verloren</th>
+                <th className="pb-3 pr-4 font-medium">Abo-Dauer</th>
+                <th className="pb-3 pr-4 font-medium">Gekündigt am</th>
+                <th className="pb-3 font-medium">Grund</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredChurned.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-gray-500">
+                    Keine Kündigungen gefunden
+                  </td>
+                </tr>
+              ) : (
+                filteredChurned.map((customer, i) => (
+                  <tr key={customer.id || i} className="border-b last:border-0 hover:bg-gray-50">
+                    <td className="py-4 pr-4 font-medium text-gray-900">{customer.customerName}</td>
+                    <td className="py-4 pr-4 text-gray-500 text-sm">{customer.customerEmail}</td>
+                    <td className="py-4 pr-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        customer.source === 'marton.ai'
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {customer.source}
+                      </span>
+                    </td>
+                    <td className="py-4 pr-4 text-gray-700">{customer.plan}</td>
+                    <td className="py-4 pr-4 font-medium text-red-600">
+                      -{formatCurrency(customer.mrr)}
+                    </td>
+                    <td className="py-4 pr-4 text-gray-500">
+                      {customer.durationDays ? `${customer.durationDays} Tage` : '-'}
+                    </td>
+                    <td className="py-4 pr-4 text-gray-500">{formatDate(customer.canceledAt)}</td>
+                    <td className="py-4">
+                      <div>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          customer.cancellationReason
+                            ? 'bg-orange-100 text-orange-700'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          {reasonTranslations[customer.cancellationReason] || customer.cancellationReason || 'Nicht angegeben'}
+                        </span>
+                        {customer.cancellationComment && (
+                          <p className="text-xs text-gray-400 mt-1 max-w-xs truncate" title={customer.cancellationComment}>
+                            "{customer.cancellationComment}"
+                          </p>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Insights Tab
 function InsightsTab({ data, loading }) {
   const insights = data?.insights || {};
@@ -527,8 +919,18 @@ function InsightsTab({ data, loading }) {
   );
 }
 
+// Helper function to format date
+function formatDate(dateString) {
+  if (!dateString) return '-';
+  return new Date(dateString).toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+}
+
 // Helper function to generate CSV
-function generateCSV(data, tab) {
+function generateCSV(data, tab, customers, churned) {
   let rows = [];
   let headers = [];
 
@@ -536,43 +938,66 @@ function generateCSV(data, tab) {
     case 'overview':
       headers = ['Metrik', 'Wert'];
       rows = [
-        ['Gesamtumsatz', data.overview?.totalRevenue],
-        ['MRR', data.saas?.mrr],
-        ['Adjusted MRR', data.overview?.adjustedMRR],
-        ['ARR', data.saas?.arr],
-        ['Erwarteter ARR', data.overview?.expectedARR],
-        ['Agentur Aufträge', data.agency?.orderCount],
+        ['Gesamtumsatz', data?.overview?.totalRevenue],
+        ['MRR', data?.saas?.mrr],
+        ['Adjusted MRR', data?.overview?.adjustedMRR],
+        ['ARR', data?.saas?.arr],
+        ['Erwarteter ARR', data?.overview?.expectedARR],
+        ['Agentur Aufträge', data?.agency?.orderCount],
       ];
       break;
     case 'saas':
       headers = ['Metrik', 'Wert'];
       rows = [
-        ['SaaS Umsatz', data.saas?.revenue],
-        ['MRR', data.saas?.mrr],
-        ['Aktive Abonnenten', data.saas?.activeSubscribers],
-        ['Einzelkäufe', data.saas?.singlePurchaseCount],
-        ['Ø Warenkorb Monatsabo', data.saas?.avgBasketMonthly],
-        ['Ø Warenkorb Jahresabo', data.saas?.avgBasketYearly],
-        ['Ø Warenkorb Einzelkauf', data.saas?.avgBasketSingle],
+        ['SaaS Umsatz', data?.saas?.revenue],
+        ['MRR', data?.saas?.mrr],
+        ['Aktive Abonnenten', data?.saas?.activeSubscribers],
+        ['Einzelkäufe', data?.saas?.singlePurchaseCount],
+        ['Ø Warenkorb Monatsabo', data?.saas?.avgBasketMonthly],
+        ['Ø Warenkorb Jahresabo', data?.saas?.avgBasketYearly],
+        ['Ø Warenkorb Einzelkauf', data?.saas?.avgBasketSingle],
       ];
       break;
     case 'agency':
       headers = ['Metrik', 'Wert'];
       rows = [
-        ['Agentur Umsatz', data.agency?.revenue],
-        ['Anzahl Aufträge', data.agency?.orderCount],
-        ['Ø Warenkorb', data.agency?.avgBasket],
+        ['Agentur Umsatz', data?.agency?.revenue],
+        ['Anzahl Aufträge', data?.agency?.orderCount],
+        ['Ø Warenkorb', data?.agency?.avgBasket],
       ];
+      break;
+    case 'customers':
+      headers = ['Name', 'E-Mail', 'Produkt', 'Plan', 'Betrag', 'Seit'];
+      rows = (customers?.subscribers || []).map(s => [
+        s.customerName,
+        s.customerEmail,
+        s.source,
+        s.plan,
+        s.amount,
+        s.startDate
+      ]);
+      break;
+    case 'churned':
+      headers = ['Name', 'E-Mail', 'Produkt', 'MRR verloren', 'Abo-Dauer', 'Gekündigt am', 'Grund'];
+      rows = (churned?.churnedCustomers || []).map(c => [
+        c.customerName,
+        c.customerEmail,
+        c.source,
+        c.mrr,
+        c.durationDays,
+        c.canceledAt,
+        c.cancellationReason
+      ]);
       break;
     case 'insights':
       headers = ['Metrik', 'Wert'];
       rows = [
-        ['Total Userbase', data.insights?.totalUserbase],
-        ['Aktive Abonnenten', data.insights?.activeSubscribers],
-        ['Conversion Free to Sub', data.insights?.conversionFreeToSub],
-        ['Conversion Free to Paying', data.insights?.conversionFreeToPaying],
-        ['CLV', data.insights?.clv],
-        ['ARPU', data.insights?.arpu],
+        ['Total Userbase', data?.insights?.totalUserbase],
+        ['Aktive Abonnenten', data?.insights?.activeSubscribers],
+        ['Conversion Free to Sub', data?.insights?.conversionFreeToSub],
+        ['Conversion Free to Paying', data?.insights?.conversionFreeToPaying],
+        ['CLV', data?.insights?.clv],
+        ['ARPU', data?.insights?.arpu],
       ];
       break;
   }
